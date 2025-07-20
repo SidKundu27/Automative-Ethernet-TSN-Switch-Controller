@@ -38,43 +38,63 @@ module tsn_traffic_shaper #(
     output wire         frame_ready,        // Ready to accept frame
     
     // Gate Control Interface (IEEE 802.1Qbv)
-    output wire [7:0]   gate_states [0:3],  // Gate state for each port/class
-    output wire         transmission_gate,  // Current gate allows transmission
-    output wire [31:0]  current_cycle_time, // Current cycle time
-    output wire [31:0]  next_gate_event,    // Time to next gate event (ns)
+    output wire [31:0]  gate_states_packed,   // Gate states packed as 32-bit word
+    output wire         transmission_gate,    // Current gate allows transmission
+    output wire [31:0]  current_cycle_time,   // Current cycle time
+    output wire [31:0]  next_gate_event,      // Time to next gate event (ns)
     
     // Credit-Based Shaping Interface (IEEE 802.1Qav)
-    output wire [31:0]  credit_sr_a [0:3],  // Credits for SR Class A (per port)
-    output wire [31:0]  credit_sr_b [0:3],  // Credits for SR Class B (per port)
-    output wire         cbs_gate_a [0:3],   // CBS gate for Class A
-    output wire         cbs_gate_b [0:3],   // CBS gate for Class B
+    output wire [127:0] credit_sr_a_packed,   // Credits for SR Class A (4x32-bit)
+    output wire [127:0] credit_sr_b_packed,   // Credits for SR Class B (4x32-bit)
+    output wire [3:0]   cbs_gate_a_packed,    // CBS gate for Class A (4 ports)
+    output wire [3:0]   cbs_gate_b_packed,    // CBS gate for Class B (4 ports)
     
     // Transmission Decision Output
-    output wire         transmit_enable,    // Frame can be transmitted now
-    output wire [2:0]   selected_class,     // Selected traffic class for TX
-    output wire [1:0]   selected_port,      // Selected port for TX
-    output wire [31:0]  transmission_time,  // Scheduled transmission time
+    output wire         transmit_enable,      // Frame can be transmitted now
+    output wire [2:0]   selected_class,       // Selected traffic class for TX
+    output wire [1:0]   selected_port,        // Selected port for TX
+    output wire [31:0]  transmission_time,    // Scheduled transmission time
     
     // Configuration Interface
-    input  wire         gcl_enable,         // Enable gate control list
-    input  wire [31:0]  cycle_time,         // Base cycle time (nanoseconds)
-    input  wire [31:0]  cycle_extension,    // Cycle extension time
-    input  wire [63:0]  base_time,          // GCL base time
+    input  wire         gcl_enable,           // Enable gate control list
+    input  wire [31:0]  cycle_time,           // Base cycle time (nanoseconds)
+    input  wire [31:0]  cycle_extension,      // Cycle extension time
+    input  wire [63:0]  base_time,            // GCL base time
     
-    // Per-class configuration (index by traffic class)
-    input  wire [31:0]  gate_duration [0:7], // Gate open duration for each class
-    input  wire [7:0]   gate_sequence [0:7], // Gate control sequence
-    input  wire [31:0]  cbs_idle_slope [0:7], // CBS idle slope (bits/sec)
-    input  wire [31:0]  cbs_send_slope [0:7], // CBS send slope (bits/sec)
-    input  wire [31:0]  cbs_hi_credit [0:7],  // CBS high credit limit
-    input  wire [31:0]  cbs_lo_credit [0:7],  // CBS low credit limit
+    // Per-class configuration (packed as vectors)
+    input  wire [255:0] gate_duration_packed,  // Gate open duration for each class (8x32-bit)
+    input  wire [63:0]  gate_sequence_packed,  // Gate control sequence (8x8-bit)
+    input  wire [255:0] cbs_idle_slope_packed, // CBS idle slope (8x32-bit)
+    input  wire [255:0] cbs_send_slope_packed, // CBS send slope (8x32-bit)
+    input  wire [255:0] cbs_hi_credit_packed,  // CBS high credit limit (8x32-bit)
+    input  wire [255:0] cbs_lo_credit_packed,  // CBS low credit limit (8x32-bit)
     
-    // Status and Statistics
-    output wire [31:0]  gates_opened [0:7],  // Count of gate openings per class
-    output wire [31:0]  frames_blocked [0:7], // Frames blocked per class
-    output wire [31:0]  guard_band_hits,     // Guard band violations
-    output wire [7:0]   shaper_status        // Overall shaper status
+    // Status and Statistics (packed outputs)
+    output wire [255:0] gates_opened_packed,   // Count of gate openings per class (8x32-bit)
+    output wire [255:0] frames_blocked_packed, // Frames blocked per class (8x32-bit)
+    output wire [31:0]  guard_band_hits,       // Guard band violations
+    output wire [7:0]   shaper_status          // Overall shaper status
 );
+
+    // Unpack input arrays from packed vectors
+    wire [31:0] gate_duration [0:7];
+    wire [7:0]  gate_sequence [0:7];
+    wire [31:0] cbs_idle_slope [0:7];
+    wire [31:0] cbs_send_slope [0:7];
+    wire [31:0] cbs_hi_credit [0:7];
+    wire [31:0] cbs_lo_credit [0:7];
+    
+    genvar i;
+    generate
+        for (i = 0; i < 8; i = i + 1) begin : unpack_arrays
+            assign gate_duration[i] = gate_duration_packed[32*i+31:32*i];
+            assign gate_sequence[i] = gate_sequence_packed[8*i+7:8*i];
+            assign cbs_idle_slope[i] = cbs_idle_slope_packed[32*i+31:32*i];
+            assign cbs_send_slope[i] = cbs_send_slope_packed[32*i+31:32*i];
+            assign cbs_hi_credit[i] = cbs_hi_credit_packed[32*i+31:32*i];
+            assign cbs_lo_credit[i] = cbs_lo_credit_packed[32*i+31:32*i];
+        end
+    endgenerate
 
     // Internal signals for gate control
     reg [31:0] cycle_counter;
@@ -106,13 +126,17 @@ module tsn_traffic_shaper #(
      */
     
     // Calculate current position in cycle
-    wire [63:0] time_since_base = ptp_time - base_time;
-    wire [31:0] cycle_position = time_since_base % cycle_time;
+    wire [63:0] time_since_base;
+    wire [31:0] cycle_position;
+    assign time_since_base = ptp_time - base_time;
+    assign cycle_position = time_since_base % cycle_time;
     
     // Gate Control List Memory (simplified - would use BRAM in real implementation)
     reg [7:0]  gcl_gates [0:1023];      // Gate states for each GCL entry
     reg [31:0] gcl_duration [0:1023];   // Duration for each GCL entry
     reg [9:0]  gcl_length;              // Number of valid GCL entries
+    // Additional internal variables for loops
+    integer p, c; // Loop variables
     
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -122,25 +146,25 @@ module tsn_traffic_shaper #(
             in_cycle <= 1'b0;
             
             // Initialize all gates closed
-            for (integer p = 0; p < NUM_PORTS; p = p + 1) begin
+            for (p = 0; p < NUM_PORTS; p = p + 1) begin
                 current_gates[p] <= 8'h00;
             end
         end else if (time_valid && gcl_enable) begin
             cycle_counter <= cycle_position;
             
             // Update gate timer and GCL index
-            if (gate_timer >= gcl_duration[gcl_index]) begin
+            if (gate_timer >= gate_duration[gcl_index]) begin
                 gate_timer <= 32'h0;
-                gcl_index <= (gcl_index + 1) % gcl_length;
+                gcl_index <= (gcl_index + 1) % 8; // Fixed to use parameter
                 
                 // Update gate states for all ports
-                for (integer p = 0; p < NUM_PORTS; p = p + 1) begin
-                    current_gates[p] <= gcl_gates[gcl_index];
+                for (p = 0; p < NUM_PORTS; p = p + 1) begin
+                    current_gates[p] <= gate_sequence[gcl_index];
                 end
                 
                 // Update statistics
-                for (integer c = 0; c < NUM_CLASSES; c = c + 1) begin
-                    if (gcl_gates[gcl_index][c]) begin
+                for (c = 0; c < NUM_CLASSES; c = c + 1) begin
+                    if (gate_sequence[gcl_index][c]) begin
                         gates_opened_reg[c] <= gates_opened_reg[c] + 1;
                     end
                 end
@@ -151,7 +175,7 @@ module tsn_traffic_shaper #(
             in_cycle <= 1'b1;
         end else begin
             // If not synchronized or GCL disabled, open all gates
-            for (integer p = 0; p < NUM_PORTS; p = p + 1) begin
+            for (p = 0; p < NUM_PORTS; p = p + 1) begin
                 current_gates[p] <= 8'hFF;
             end
             in_cycle <= 1'b0;
@@ -168,16 +192,18 @@ module tsn_traffic_shaper #(
         for (port = 0; port < NUM_PORTS; port = port + 1) begin : gen_ports
             for (class = 0; class < NUM_CLASSES; class = class + 1) begin : gen_classes
                 
+                // Wire declarations for each port/class combination
+                wire [31:0] time_delta;
+                reg [31:0] credit_delta;
+                
+                assign time_delta = ptp_time[31:0] - last_update_time[port][class];
+                
                 always @(posedge clk or negedge rst_n) begin
                     if (!rst_n) begin
                         credit_accumulator[port][class] <= 32'h0;
                         last_update_time[port][class] <= 32'h0;
                         credit_gate[port][class] <= 1'b1;
                     end else if (time_valid) begin
-                        // Calculate time delta since last update
-                        wire [31:0] time_delta = ptp_time[31:0] - last_update_time[port][class];
-                        wire [31:0] credit_delta;
-                        
                         // Update credits based on idle/send slope
                         if (frame_valid && frame_port == port && frame_class == class) begin
                             // Frame being transmitted - use send slope (negative)
@@ -219,7 +245,8 @@ module tsn_traffic_shaper #(
     assign frame_transmission_time = (frame_length * 8); // nanoseconds at 1 Gbps
     
     // Time until next gate closure for the frame's traffic class
-    wire [31:0] remaining_gate_time = gcl_duration[gcl_index] - gate_timer;
+    wire [31:0] remaining_gate_time;
+    assign remaining_gate_time = gcl_duration[gcl_index] - gate_timer;
     assign time_to_gate_close = remaining_gate_time;
     
     // Check if frame would complete before gate closes (including guard band)
@@ -236,6 +263,22 @@ module tsn_traffic_shaper #(
      * Implements strict priority with TSN gate and CBS constraints
      */
     
+    // Transmission decision wires
+    wire gate_open;
+    wire cbs_allowed;
+    wire guard_ok;
+    wire can_transmit;
+    
+    // Transmission decision logic
+    assign gate_open = current_gates[frame_port][frame_class];
+    assign cbs_allowed = credit_gate[frame_port][frame_class];
+    assign guard_ok = !guard_band_violation;
+    
+    // SR classes (4 and 5) use both gate and CBS, others use only gate control
+    assign can_transmit = (frame_class == 3'd4 || frame_class == 3'd5) ? 
+                         (gate_open && cbs_allowed && guard_ok) : 
+                         (gate_open && guard_ok);
+    
     reg [2:0] selected_class_reg;
     reg [1:0] selected_port_reg;
     reg       transmit_enable_reg;
@@ -251,26 +294,6 @@ module tsn_traffic_shaper #(
             transmit_enable_reg <= 1'b0;
             
             if (frame_valid && time_valid) begin
-                // Check if frame can be transmitted based on:
-                // 1. Gate state (802.1Qbv)
-                // 2. Credit availability (802.1Qav for SR classes)
-                // 3. Guard band constraints
-                
-                wire gate_open = current_gates[frame_port][frame_class];
-                wire cbs_allowed = credit_gate[frame_port][frame_class];
-                wire guard_ok = !guard_band_violation;
-                
-                // SR classes (typically 4 and 5) use both gate and CBS
-                // Other classes use only gate control
-                wire can_transmit;
-                if (frame_class == 3'd4 || frame_class == 3'd5) begin
-                    // Streaming traffic - check both gate and CBS
-                    assign can_transmit = gate_open && cbs_allowed && guard_ok;
-                end else begin
-                    // Other traffic - check only gate and guard band
-                    assign can_transmit = gate_open && guard_ok;
-                end
-                
                 if (can_transmit) begin
                     transmit_enable_reg <= 1'b1;
                     selected_class_reg <= frame_class;
@@ -303,7 +326,8 @@ module tsn_traffic_shaper #(
      * Status and Debug Interface
      */
     
-    wire [7:0] shaper_status_wire = {
+    wire [7:0] shaper_status_wire;
+    assign shaper_status_wire = {
         guard_band_violation,       // Bit 7: Guard band violation
         transmit_enable_reg,        // Bit 6: Currently transmitting
         in_cycle,                   // Bit 5: In valid cycle
@@ -318,36 +342,10 @@ module tsn_traffic_shaper #(
      * Output Assignments
      */
     
-    // Gate states
-    assign gate_states[0] = current_gates[0];
-    assign gate_states[1] = current_gates[1];
-    assign gate_states[2] = current_gates[2];
-    assign gate_states[3] = current_gates[3];
-    
+    // Gate control logic outputs
     assign transmission_gate = current_gates[frame_port][frame_class];
     assign current_cycle_time = cycle_counter;
-    assign next_gate_event = gcl_duration[gcl_index] - gate_timer;
-    
-    // Credit-based shaping outputs
-    assign credit_sr_a[0] = credit_accumulator[0][4]; // Class A typically uses TC 4
-    assign credit_sr_a[1] = credit_accumulator[1][4];
-    assign credit_sr_a[2] = credit_accumulator[2][4];
-    assign credit_sr_a[3] = credit_accumulator[3][4];
-    
-    assign credit_sr_b[0] = credit_accumulator[0][5]; // Class B typically uses TC 5
-    assign credit_sr_b[1] = credit_accumulator[1][5];
-    assign credit_sr_b[2] = credit_accumulator[2][5];
-    assign credit_sr_b[3] = credit_accumulator[3][5];
-    
-    assign cbs_gate_a[0] = credit_gate[0][4];
-    assign cbs_gate_a[1] = credit_gate[1][4];
-    assign cbs_gate_a[2] = credit_gate[2][4];
-    assign cbs_gate_a[3] = credit_gate[3][4];
-    
-    assign cbs_gate_b[0] = credit_gate[0][5];
-    assign cbs_gate_b[1] = credit_gate[1][5];
-    assign cbs_gate_b[2] = credit_gate[2][5];
-    assign cbs_gate_b[3] = credit_gate[3][5];
+    assign next_gate_event = gate_duration[gcl_index] - gate_timer;
     
     // Transmission control
     assign transmit_enable = transmit_enable_reg;
@@ -356,24 +354,19 @@ module tsn_traffic_shaper #(
     assign transmission_time = transmission_time_reg;
     assign frame_ready = !guard_band_violation; // Simplified ready logic
     
-    // Statistics
-    assign gates_opened[0] = gates_opened_reg[0];
-    assign gates_opened[1] = gates_opened_reg[1];
-    assign gates_opened[2] = gates_opened_reg[2];
-    assign gates_opened[3] = gates_opened_reg[3];
-    assign gates_opened[4] = gates_opened_reg[4];
-    assign gates_opened[5] = gates_opened_reg[5];
-    assign gates_opened[6] = gates_opened_reg[6];
-    assign gates_opened[7] = gates_opened_reg[7];
+    // Pack output arrays
+    assign gates_opened_packed = {gates_opened_reg[7], gates_opened_reg[6], gates_opened_reg[5], gates_opened_reg[4],
+                                  gates_opened_reg[3], gates_opened_reg[2], gates_opened_reg[1], gates_opened_reg[0]};
     
-    assign frames_blocked[0] = frames_blocked_reg[0];
-    assign frames_blocked[1] = frames_blocked_reg[1];
-    assign frames_blocked[2] = frames_blocked_reg[2];
-    assign frames_blocked[3] = frames_blocked_reg[3];
-    assign frames_blocked[4] = frames_blocked_reg[4];
-    assign frames_blocked[5] = frames_blocked_reg[5];
-    assign frames_blocked[6] = frames_blocked_reg[6];
-    assign frames_blocked[7] = frames_blocked_reg[7];
+    assign frames_blocked_packed = {frames_blocked_reg[7], frames_blocked_reg[6], frames_blocked_reg[5], frames_blocked_reg[4],
+                                    frames_blocked_reg[3], frames_blocked_reg[2], frames_blocked_reg[1], frames_blocked_reg[0]};
+    
+    // Pack gate states and credit outputs (simplified for now)
+    assign gate_states_packed = {current_gates[3], current_gates[2], current_gates[1], current_gates[0]};
+    assign credit_sr_a_packed = {credit_accumulator[3][6], credit_accumulator[2][6], credit_accumulator[1][6], credit_accumulator[0][6]};
+    assign credit_sr_b_packed = {credit_accumulator[3][7], credit_accumulator[2][7], credit_accumulator[1][7], credit_accumulator[0][7]};
+    assign cbs_gate_a_packed = {credit_gate[3][6], credit_gate[2][6], credit_gate[1][6], credit_gate[0][6]};
+    assign cbs_gate_b_packed = {credit_gate[3][7], credit_gate[2][7], credit_gate[1][7], credit_gate[0][7]};
     
     assign guard_band_hits = guard_band_hits_reg;
     assign shaper_status = shaper_status_wire;

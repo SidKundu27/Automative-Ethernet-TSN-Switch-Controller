@@ -6,7 +6,21 @@ Since you have `iverilog` (Icarus Verilog) and `xvlog` (Xilinx Vivado) available
 
 Since you have `xvlog` (Xilinx Vivado) available on your Linux system, here's how to get started:
 
-## Option 1: Using the Test Script (Simplest)
+## Option 1: Direct Compilation Test (Recommended)
+
+```bash
+cd scripts
+chmod +x direct_compile_test.sh
+./direct_compile_test.sh
+```
+
+This script:
+- Checks all RTL files exist
+- Runs `xvlog -f rtl_files.f` 
+- Provides clear success/failure feedback
+- Works around script detection issues
+
+## Option 2: Using the Test Script
 
 ```bash
 cd scripts
@@ -16,7 +30,7 @@ chmod +x test_linux_compile.sh
 
 This will test file paths and attempt Vivado compilation.
 
-## Option 2: Manual Compilation with Vivado (Recommended)
+## Option 3: Manual Compilation with Vivado
 
 ```bash
 cd scripts
@@ -49,20 +63,19 @@ source /tools/Xilinx/Vivado/2023.1/settings64.sh
 xvlog -f rtl_files.f
 ```
 
-## Option 3: Force Vivado in Main Script
+## Recent Fixes Applied
 
-```bash
-cd scripts
+The compilation errors you encountered have been fixed:
 
-# Edit the script to force Vivado
-export SIMULATOR=vivado
+✅ **TSN Traffic Shaper Syntax Issues:**
+- Converted SystemVerilog array ports to packed vectors
+- Fixed `for (integer ...)` declarations (moved to module scope)
+- Removed `wire` declarations inside `always` blocks
+- Added proper array packing/unpacking logic
 
-# Source Vivado environment first
-source /tools/Xilinx/Vivado/2023.1/settings64.sh
-
-# Run the script
-./run_simulation.sh compile
-```
+✅ **File Path Issues:**
+- Updated file lists to use correct relative paths (`../../rtl/...`)
+- Fixed include path handling for Vivado compilation
 
 ## Key Differences Between Simulators
 

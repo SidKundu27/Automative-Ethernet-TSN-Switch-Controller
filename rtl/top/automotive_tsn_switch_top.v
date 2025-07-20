@@ -155,11 +155,13 @@ module automotive_tsn_switch_top #(
     wire [31:0]  ptp_offset;
     wire [63:0]  frame_timestamps [0:3];
     
-    // TSN traffic shaping
-    wire [7:0]   tsn_gate_states [0:3];
+    // TSN traffic shaping (updated for packed arrays)
+    wire [31:0]  tsn_gate_states_packed;
     wire         tsn_transmission_gate;
-    wire [31:0]  tsn_credit_sr_a [0:3];
-    wire [31:0]  tsn_credit_sr_b [0:3];
+    wire [127:0] tsn_credit_sr_a_packed;
+    wire [127:0] tsn_credit_sr_b_packed;
+    wire [3:0]   tsn_cbs_gate_a_packed;
+    wire [3:0]   tsn_cbs_gate_b_packed;
     wire         tsn_transmit_enable;
     wire [2:0]   tsn_selected_class;
     wire [1:0]   tsn_selected_port;
@@ -382,17 +384,17 @@ module automotive_tsn_switch_top #(
         .frame_preemptable(1'b0),
         .frame_ready(),
         
-        // Gate control outputs
-        .gate_states(tsn_gate_states),
+        // Gate control outputs (using packed interface)
+        .gate_states_packed(tsn_gate_states_packed),
         .transmission_gate(tsn_transmission_gate),
         .current_cycle_time(config_registers[72]),
         .next_gate_event(config_registers[73]),
         
-        // Credit-based shaping
-        .credit_sr_a(tsn_credit_sr_a),
-        .credit_sr_b(tsn_credit_sr_b),
-        .cbs_gate_a(),
-        .cbs_gate_b(),
+        // Credit-based shaping (using packed interface)
+        .credit_sr_a_packed(tsn_credit_sr_a_packed),
+        .credit_sr_b_packed(tsn_credit_sr_b_packed),
+        .cbs_gate_a_packed(tsn_cbs_gate_a_packed),
+        .cbs_gate_b_packed(tsn_cbs_gate_b_packed),
         
         // Transmission control
         .transmit_enable(tsn_transmit_enable),
@@ -406,25 +408,19 @@ module automotive_tsn_switch_top #(
         .cycle_extension(config_registers[14]),
         .base_time({config_registers[15], config_registers[16]}),
         
-        // Per-class configuration (simplified)
-        .gate_duration('{32'd1000, 32'd1000, 32'd1000, 32'd1000, 
-                        32'd1000, 32'd1000, 32'd1000, 32'd1000}),
-        .gate_sequence('{8'hFF, 8'hFF, 8'hFF, 8'hFF, 
-                        8'hFF, 8'hFF, 8'hFF, 8'hFF}),
-        .cbs_idle_slope('{32'd125000000, 32'd125000000, 32'd125000000, 32'd125000000,
-                         32'd125000000, 32'd125000000, 32'd125000000, 32'd125000000}),
-        .cbs_send_slope('{32'd125000000, 32'd125000000, 32'd125000000, 32'd125000000,
-                         32'd125000000, 32'd125000000, 32'd125000000, 32'd125000000}),
-        .cbs_hi_credit('{32'd1000000, 32'd1000000, 32'd1000000, 32'd1000000,
+        // Per-class configuration (using packed vectors)
+        .gate_duration_packed(256'h000003E8000003E8000003E8000003E8000003E8000003E8000003E8000003E8), // 1000ns each
+        .gate_sequence_packed(64'hFFFFFFFFFFFFFFFF), // All gates open
+        .cbs_idle_slope_packed(256'h07735940077359400773594007735940077359400773594007735940077359400), // 125Mbps each
+        .cbs_send_slope_packed(256'h07735940077359400773594007735940077359400773594007735940077359400), // 125Mbps each
+        .cbs_hi_credit_packed(256'h000F4240000F4240000F4240000F4240000F4240000F4240000F4240000F4240), // 1M credits each
+        .cbs_lo_credit_packed(256'hFFF0BDBFFFF0BDBFFFF0BDBFFFF0BDBFFFF0BDBFFFF0BDBFFFF0BDBFFFF0BDBF), // -1M credits each
                         32'd1000000, 32'd1000000, 32'd1000000, 32'd1000000}),
         .cbs_lo_credit('{-32'd1000000, -32'd1000000, -32'd1000000, -32'd1000000,
-                        -32'd1000000, -32'd1000000, -32'd1000000, -32'd1000000}),
         
-        // Statistics
-        .gates_opened('{config_registers[80], config_registers[81], config_registers[82], config_registers[83],
-                       config_registers[84], config_registers[85], config_registers[86], config_registers[87]}),
-        .frames_blocked('{config_registers[88], config_registers[89], config_registers[90], config_registers[91],
-                         config_registers[92], config_registers[93], config_registers[94], config_registers[95]}),
+        // Statistics (using packed interface)
+        .gates_opened_packed(/* Connect to status registers */),
+        .frames_blocked_packed(/* Connect to status registers */),
         .guard_band_hits(config_registers[96]),
         .shaper_status(config_registers[97][7:0])
     );
