@@ -49,45 +49,63 @@ This project implements a **4-port Time-Sensitive Networking (TSN) Ethernet Swit
 
 ## Implementation Timeline
 
-### Phase 1: Foundation (Weeks 1-2) ✅
+### Phase 1: Foundation ✅
 - [x] Project setup and documentation
 - [x] Ethernet MAC implementation
-- [x] Basic packet processing
-- [x] FIFO management
+- [x] PTP synchronization engine
+- [x] TSN traffic shaping
+- [x] Switching matrix
+- [x] System integration
+- [x] Comprehensive testbenches
 
-### Phase 2: TSN Core Features (Weeks 3-4)
-- [ ] IEEE 802.1AS time synchronization
-- [ ] IEEE 802.1Qbv Time-Aware Shaper
-- [ ] IEEE 802.1Qav Credit-Based Shaper
-- [ ] Priority queue management
+### Phase 2: FPGA Implementation
+- [ ] Synthesis optimization
+- [ ] Timing constraint implementation
+- [ ] Resource utilization optimization
+- [ ] Hardware validation platform
 
-### Phase 3: Advanced Features (Weeks 5-6)
+### Phase 3: Advanced Features
 - [ ] Frame preemption (IEEE 802.1Qbu)
-- [ ] Security features
+- [ ] Enhanced security features
 - [ ] Automotive diagnostics
-- [ ] Wake-on-LAN support
+- [ ] Performance optimization
 
-### Phase 4: Optimization & Verification (Weeks 7-8)
-- [ ] Timing closure optimization
-- [ ] FPGA implementation
-- [ ] Performance verification
-- [ ] Automotive test scenarios
-
-### Phase 5: Documentation & Demo (Weeks 9-10)
-- [ ] Complete documentation
+### Phase 4: Verification & Documentation
+- [ ] Automotive compliance testing
 - [ ] Timing analysis reports
-- [ ] Demo video creation
-- [ ] Final verification reports
+- [ ] Complete design documentation
+- [ ] Demo applications
 
 ## Getting Started
 
 1. **Prerequisites:**
-   - Xilinx Vivado or Intel Quartus
-   - ModelSim or QuestaSim
-   - SystemVerilog knowledge
-   - Understanding of Ethernet and TSN protocols
+   - **FPGA Tools:** Xilinx Vivado or Intel Quartus Prime
+   - **Simulator:** ModelSim/QuestaSim or Vivado Simulator
+   - **Knowledge:** SystemVerilog, Ethernet protocols, TSN standards
 
 2. **Build Instructions:**
+   
+   **On Windows (PowerShell):**
+   ```powershell
+   # Clone repository
+   git clone <repository-url>
+   cd Automative-Ethernet-TSN-Switch-Controller
+   
+   # Check simulator availability and run tests
+   cd scripts
+   .\run_simulation.ps1 help        # Show help and prerequisites
+   .\run_simulation.ps1 compile     # Compile only (no simulation)
+   .\run_simulation.ps1 all         # Full test suite (requires simulator)
+   
+   # Alternative: Use batch file wrapper
+   .\run_simulation.bat help
+   .\run_simulation.bat compile
+   
+   # Synthesize for FPGA
+   .\synthesize.ps1
+   ```
+   
+   **On Linux/macOS (Bash):**
    ```bash
    # Clone repository
    git clone <repository-url>
@@ -95,16 +113,22 @@ This project implements a **4-port Time-Sensitive Networking (TSN) Ethernet Swit
    
    # Run simulation
    cd scripts
-   ./run_simulation.sh
+   ./run_simulation.sh all
    
    # Synthesize for FPGA
    ./synthesize.sh
    ```
 
-3. **Key Documentation:**
+3. **Simulator Setup:**
+   - **ModelSim:** Add `<ModelSim_install>/win32aloem` to PATH
+   - **Vivado:** Source `settings64.ps1` from Vivado installation
+   - **Alternative:** Use file list generation without simulation
+
+4. **Key Documentation:**
    - [Architecture Overview](docs/architecture/system_architecture.md)
    - [Timing Requirements](docs/timing/timing_specification.md)
-   - [Verification Plan](docs/verification/verification_plan.md)
+   - [Project Status](PROJECT_STATUS.md)
+   - [Troubleshooting Guide](TROUBLESHOOTING.md)
 
 ## Contact
 

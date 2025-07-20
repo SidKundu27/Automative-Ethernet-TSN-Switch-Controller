@@ -43,9 +43,80 @@ function Write-Error {
     Write-Host "[ERROR] $Message" -ForegroundColor Red
 }
 
+# Function to check simulator availability
+function Test-Simulator {
+    param([string]$SimulatorName)
+    
+    switch ($SimulatorName) {
+        { $_ -in @("modelsim", "questa") } {
+            $vlib = Get-Command "vlib" -ErrorAction SilentlyContinue
+            $vlog = Get-Command "vlog" -ErrorAction SilentlyContinue
+            $vsim = Get-Command "vsim" -ErrorAction SilentlyContinue
+            
+            if (-not ($vlib -and $vlog -and $vsim)) {
+                return $false
+            }
+            return $true
+        }
+        "vivado" {
+            $xvlog = Get-Command "xvlog" -ErrorAction SilentlyContinue
+            $xsim = Get-Command "xsim" -ErrorAction SilentlyContinue
+            
+            if (-not ($xvlog -and $xsim)) {
+                return $false
+            }
+            return $true
+        }
+        default {
+            return $false
+        }
+    }
+}
+
+# Function to print simulator installation instructions
+function Show-SimulatorHelp {
+    param([string]$SimulatorName)
+    
+    Write-Warning "Simulator '$SimulatorName' not found or not in PATH."
+    Write-Host ""
+    Write-Host "Installation Instructions:" -ForegroundColor Cyan
+    Write-Host ""
+    
+    switch ($SimulatorName) {
+        { $_ -in @("modelsim", "questa") } {
+            Write-Host "For ModelSim/QuestaSim:" -ForegroundColor Yellow
+            Write-Host "1. Download Intel/Mentor Graphics ModelSim or QuestaSim"
+            Write-Host "2. Install the software"
+            Write-Host "3. Add the installation bin directory to your PATH"
+            Write-Host "   Example: C:\intelFPGA\20.1\modelsim_ase\win32aloem"
+            Write-Host "4. Restart PowerShell and try again"
+        }
+        "vivado" {
+            Write-Host "For Vivado Simulator:" -ForegroundColor Yellow
+            Write-Host "1. Download Xilinx Vivado"
+            Write-Host "2. Install Vivado (Webpack edition is free)"
+            Write-Host "3. Source the Vivado environment:"
+            Write-Host "   . C:\Xilinx\Vivado\2023.1\settings64.ps1"
+            Write-Host "4. Try running the script again"
+        }
+    }
+    
+    Write-Host ""
+    Write-Host "Alternative: Use simulation mode without actual compilation" -ForegroundColor Green
+    Write-Host "Run: .\run_simulation.ps1 -Action help"
+}
+
 # Setup simulation environment
 function Setup-Environment {
     Write-Status "Setting up simulation environment..."
+    
+    # Check if simulator is available
+    if (-not (Test-Simulator $Simulator)) {
+        Show-SimulatorHelp $Simulator
+        Write-Host ""
+        Write-Status "Continuing with file list creation only..."
+        Write-Host ""
+    }
     
     # Create directories
     if (-not (Test-Path $WorkDir)) { New-Item -ItemType Directory -Path $WorkDir }
@@ -100,54 +171,69 @@ $TbDir/automotive/tb_automotive_tsn_system.v
 function Compile-Design {
     Write-Status "Compiling RTL design and testbenches..."
     
+    # Check if simulator is available
+    if (-not (Test-Simulator $Simulator)) {
+        Write-Error "Simulator '$Simulator' not available. Please install the simulator first."
+        Write-Warning "Run with -Action help for installation instructions."
+        return $false
+    }
+    
     Push-Location $WorkDir
     
-    switch ($Simulator) {
-        { $_ -in @("modelsim", "questa") } {
-            # Create library
-            if (-not (Test-Path "work")) {
-                & vlib work
+    try {
+        switch ($Simulator) {
+            { $_ -in @("modelsim", "questa") } {
+                # Create library
+                if (-not (Test-Path "work")) {
+                    Write-Status "Creating work library..."
+                    & vlib work
+                    if ($LASTEXITCODE -ne 0) {
+                        throw "Failed to create work library"
+                    }
+                }
+                
+                # Compile RTL files
+                Write-Status "Compiling RTL files..."
+                & vlog -f rtl_files.f "+incdir+$SrcDir"
                 if ($LASTEXITCODE -ne 0) {
-                    Write-Error "Failed to create work library"
-                    Pop-Location
-                    return $false
+                    throw "RTL compilation failed"
+                }
+                
+                # Compile testbenches
+                Write-Status "Compiling testbenches..."
+                & vlog -f tb_files.f "+incdir+$TbDir"
+                if ($LASTEXITCODE -ne 0) {
+                    throw "Testbench compilation failed"
                 }
             }
             
-            # Compile RTL files
-            Write-Status "Compiling RTL files..."
-            & vlog -f rtl_files.f "+incdir+$SrcDir"
-            if ($LASTEXITCODE -ne 0) {
-                Write-Error "RTL compilation failed"
-                Pop-Location
-                return $false
+            "vivado" {
+                Write-Status "Using Vivado simulator..."
+                & xvlog -f rtl_files.f
+                if ($LASTEXITCODE -ne 0) {
+                    throw "RTL compilation failed with Vivado"
+                }
+                & xvlog -f tb_files.f
+                if ($LASTEXITCODE -ne 0) {
+                    throw "Testbench compilation failed with Vivado"
+                }
             }
             
-            # Compile testbenches
-            Write-Status "Compiling testbenches..."
-            & vlog -f tb_files.f "+incdir+$TbDir"
-            if ($LASTEXITCODE -ne 0) {
-                Write-Error "Testbench compilation failed"
-                Pop-Location
-                return $false
+            default {
+                throw "Unsupported simulator: $Simulator"
             }
         }
         
-        "vivado" {
-            Write-Status "Using Vivado simulator..."
-            & xvlog -f rtl_files.f
-            & xvlog -f tb_files.f
-        }
-        
-        default {
-            Write-Error "Unsupported simulator: $Simulator"
-            Pop-Location
-            return $false
-        }
+        Write-Success "Compilation complete"
+        return $true
     }
-    
-    Pop-Location
-    Write-Success "Compilation complete"
+    catch {
+        Write-Error "Compilation failed: $_"
+        return $false
+    }
+    finally {
+        Pop-Location
+    }
     return $true
 }
 
@@ -363,6 +449,21 @@ Examples:
   .\run_simulation.ps1                    # Run complete test suite
   .\run_simulation.ps1 unit              # Run only unit tests
   .\run_simulation.ps1 perf -Simulator vivado   # Run performance tests with Vivado
+
+Prerequisites:
+  To run simulations, you need one of the following installed:
+
+  ModelSim/QuestaSim:
+    - Download from Intel/Mentor Graphics
+    - Add installation bin directory to PATH
+    - Example: C:\intelFPGA\20.1\modelsim_ase\win32aloem
+
+  Xilinx Vivado:
+    - Download Vivado (Webpack is free)
+    - Source environment: . C:\Xilinx\Vivado\2023.1\settings64.ps1
+
+  If no simulator is available, the script will create file lists and
+  provide installation instructions.
 "@
 }
 

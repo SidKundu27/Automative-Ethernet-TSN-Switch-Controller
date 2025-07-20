@@ -1,0 +1,155 @@
+# Automotive Ethernet TSN Switch Controller
+# .gitignore file
+
+# Simulation work directories
+work/
+waves/
+*.wlf
+*.vstf
+
+# ModelSim/QuestaSim files
+*.mpf
+*.mti
+*.dat
+transcript
+*.log
+modelsim.ini
+vsim.wlf
+
+# Vivado files
+*.jou
+*.log
+*.str
+*.xpr
+*.cache/
+*.hw/
+*.ip_user_files/
+*.runs/
+*.sim/
+*.srcs/sources_1/ip/
+*.gen/
+
+# Quartus files
+*.qpf
+*.qsf
+*.qws
+*.rpt
+*.summary
+*.done
+*.jdi
+*.pin
+*.sof
+*.pof
+db/
+incremental_db/
+output_files/
+
+# Timing analysis
+*.sta.rpt
+*.tan.rpt
+*.pow.rpt
+
+# Synthesis outputs
+*.ngc
+*.ngd
+*.ncd
+*.pcf
+*.bit
+*.bin
+*.mcs
+
+# Temporary files
+*.tmp
+*.temp
+*~
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+*.swp
+*.swo
+*.bak
+
+# Build artifacts
+build/
+dist/
+*.tar.gz
+*.zip
+
+# Log files
+*.debug
+*.trace
+error.log
+warning.log
+
+# Coverage reports
+coverage/
+*.ucdb
+*.cov
+
+# Documentation build
+docs/_build/
+docs/html/
+docs/latex/
+
+# Python files (if any scripts)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+
+# Node.js files (if any web interfaces)
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# OS generated files
+*.DS_Store
+*.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Editor backups
+*~
+*.swp
+*.swo
+*.orig
+
+# Archive files
+*.rar
+*.tar
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.zip
+*.7z
+
+# Simulation specific
+*.fst
+*.fst.hier
+*.vcd
+*.shm
+*.shm/
+*.pro
+*.pb
+
+# Waveform files
+*.vcd
+*.evcd
+*.wdb
+*.shm/
+*.trn
+*.dsn
+
+# Lint reports
+*.lint
+*.lnt
