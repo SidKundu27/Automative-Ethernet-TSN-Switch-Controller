@@ -132,36 +132,36 @@ function Setup-Environment {
 function Create-FileLists {
     Write-Status "Creating file lists..."
     
-    # RTL file list
+    # RTL file list (paths relative to work directory)
     @"
 # Automotive TSN Switch RTL Files
 # Dependencies ordered for compilation
 
 # MAC Layer
-$SrcDir/mac/automotive_eth_mac.v
+..\..\rtl\mac\automotive_eth_mac.v
 
 # PTP Synchronization  
-$SrcDir/ptp/ptp_sync_engine.v
+..\..\rtl\ptp\ptp_sync_engine.v
 
 # TSN Traffic Shaping
-$SrcDir/tsn/tsn_traffic_shaper.v
+..\..\rtl\tsn\tsn_traffic_shaper.v
 
 # Switching Matrix
-$SrcDir/switch/switching_matrix.v
+..\..\rtl\switch\switching_matrix.v
 
 # Top Level Integration
-$SrcDir/top/automotive_tsn_switch_top.v
+..\..\rtl\top\automotive_tsn_switch_top.v
 "@ | Out-File -FilePath "$WorkDir\rtl_files.f" -Encoding ASCII
 
-    # Testbench file list
+    # Testbench file list (paths relative to work directory)
     @"
 # Testbench Files
 
 # Unit Tests
-$TbDir/unit/tb_automotive_eth_mac.v
+..\..\testbench\unit\tb_automotive_eth_mac.v
 
 # Automotive System Tests
-$TbDir/automotive/tb_automotive_tsn_system.v
+..\..\testbench\automotive\tb_automotive_tsn_system.v
 "@ | Out-File -FilePath "$WorkDir\tb_files.f" -Encoding ASCII
 
     Write-Success "File lists created"
@@ -194,14 +194,14 @@ function Compile-Design {
                 
                 # Compile RTL files
                 Write-Status "Compiling RTL files..."
-                & vlog -f rtl_files.f "+incdir+$SrcDir"
+                & vlog -f rtl_files.f "+incdir+..\..\rtl"
                 if ($LASTEXITCODE -ne 0) {
                     throw "RTL compilation failed"
                 }
                 
                 # Compile testbenches
                 Write-Status "Compiling testbenches..."
-                & vlog -f tb_files.f "+incdir+$TbDir"
+                & vlog -f tb_files.f "+incdir+..\..\testbench"
                 if ($LASTEXITCODE -ne 0) {
                     throw "Testbench compilation failed"
                 }

@@ -11,7 +11,7 @@
 set -e  # Exit on any error
 
 # Configuration
-SIMULATOR="modelsim"  # or "vivado", "questa"
+SIMULATOR="${SIMULATOR:-auto}"  # auto-detect, or "modelsim", "vivado", "icarus"
 WORK_DIR="./work"
 SRC_DIR="../rtl"
 TB_DIR="../testbench"
@@ -41,9 +41,76 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+# Function to detect available simulators
+detect_simulator() {
+    if [ "$SIMULATOR" != "auto" ]; then
+        return 0
+    fi
+    
+    print_status "Auto-detecting available simulators..."
+    
+    # Check for Icarus Verilog (most commonly available)
+    if command -v iverilog >/dev/null 2>&1; then
+        SIMULATOR="icarus"
+        print_success "Found Icarus Verilog"
+        return 0
+    fi
+    
+    # Check for Vivado
+    if command -v xvlog >/dev/null 2>&1; then
+        SIMULATOR="vivado"
+        print_success "Found Xilinx Vivado Simulator"
+        return 0
+    fi
+    
+    # Check for ModelSim/QuestaSim
+    if command -v vlog >/dev/null 2>&1; then
+        SIMULATOR="modelsim"
+        print_success "Found ModelSim/QuestaSim"
+        return 0
+    fi
+    
+    print_error "No supported simulator found!"
+    print_warning "Available simulators: Icarus Verilog (iverilog), Vivado (xvlog), ModelSim (vlog)"
+    print_warning "Continuing with file list generation only..."
+    SIMULATOR="none"
+    return 1
+}
+
+# Function to check if simulator is available
+check_simulator() {
+    case $SIMULATOR in
+        "icarus")
+            if ! command -v iverilog >/dev/null 2>&1; then
+                print_error "Icarus Verilog not found. Please install: sudo apt-get install iverilog"
+                return 1
+            fi
+            ;;
+        "vivado")
+            if ! command -v xvlog >/dev/null 2>&1; then
+                print_error "Vivado simulator not found. Please source Vivado environment."
+                return 1
+            fi
+            ;;
+        "modelsim"|"questa")
+            if ! command -v vlog >/dev/null 2>&1; then
+                print_error "ModelSim/QuestaSim not found. Please add to PATH."
+                return 1
+            fi
+            ;;
+        "none")
+            return 1
+            ;;
+    esac
+    return 0
+}
+
 # Create work directories
 setup_environment() {
     print_status "Setting up simulation environment..."
+    
+    # Detect available simulator
+    detect_simulator
     
     mkdir -p $WORK_DIR
     mkdir -p $WAVE_DIR
@@ -52,42 +119,43 @@ setup_environment() {
     create_file_lists
     
     print_success "Environment setup complete"
+    print_status "Using simulator: $SIMULATOR"
 }
 
 # Create file lists for compilation
 create_file_lists() {
     print_status "Creating file lists..."
     
-    # RTL file list
+    # RTL file list (paths relative to work directory)
     cat > $WORK_DIR/rtl_files.f << EOF
 # Automotive TSN Switch RTL Files
 # Dependencies ordered for compilation
 
 # MAC Layer
-$SRC_DIR/mac/automotive_eth_mac.v
+../../rtl/mac/automotive_eth_mac.v
 
 # PTP Synchronization
-$SRC_DIR/ptp/ptp_sync_engine.v
+../../rtl/ptp/ptp_sync_engine.v
 
 # TSN Traffic Shaping
-$SRC_DIR/tsn/tsn_traffic_shaper.v
+../../rtl/tsn/tsn_traffic_shaper.v
 
 # Switching Matrix
-$SRC_DIR/switch/switching_matrix.v
+../../rtl/switch/switching_matrix.v
 
 # Top Level Integration
-$SRC_DIR/top/automotive_tsn_switch_top.v
+../../rtl/top/automotive_tsn_switch_top.v
 EOF
 
-    # Testbench file list
+    # Testbench file list (paths relative to work directory)
     cat > $WORK_DIR/tb_files.f << EOF
 # Testbench Files
 
 # Unit Tests
-$TB_DIR/unit/tb_automotive_eth_mac.v
+../../testbench/unit/tb_automotive_eth_mac.v
 
 # Automotive System Tests
-$TB_DIR/automotive/tb_automotive_tsn_system.v
+../../testbench/automotive/tb_automotive_tsn_system.v
 EOF
 
     print_success "File lists created"
@@ -97,9 +165,31 @@ EOF
 compile_design() {
     print_status "Compiling RTL design and testbenches..."
     
+    if ! check_simulator; then
+        print_warning "Simulator not available, skipping compilation"
+        return 1
+    fi
+    
     cd $WORK_DIR
     
     case $SIMULATOR in
+        "icarus")
+            print_status "Using Icarus Verilog..."
+            # Compile RTL files with Icarus Verilog
+            print_status "Compiling RTL files..."
+            iverilog -g2012 -I../../rtl -f rtl_files.f -o rtl_compiled.vvp
+            
+            print_status "Compiling testbenches..."
+            # For each testbench, compile separately
+            if [ -f "../../testbench/unit/tb_automotive_eth_mac.v" ]; then
+                iverilog -g2012 -I../../rtl -I../../testbench -f rtl_files.f ../../testbench/unit/tb_automotive_eth_mac.v -o tb_mac.vvp
+            fi
+            
+            if [ -f "../../testbench/automotive/tb_automotive_tsn_system.v" ]; then
+                iverilog -g2012 -I../../rtl -I../../testbench -f rtl_files.f ../../testbench/automotive/tb_automotive_tsn_system.v -o tb_system.vvp
+            fi
+            ;;
+            
         "modelsim"|"questa")
             # Create library
             if [ ! -d "work" ]; then
@@ -108,11 +198,11 @@ compile_design() {
             
             # Compile RTL files
             print_status "Compiling RTL files..."
-            vlog -f rtl_files.f +incdir+$SRC_DIR
+            vlog -f rtl_files.f +incdir+../../rtl
             
             # Compile testbenches
             print_status "Compiling testbenches..."
-            vlog -f tb_files.f +incdir+$TB_DIR
+            vlog -f tb_files.f +incdir+../../testbench
             ;;
             
         "vivado")
@@ -124,21 +214,38 @@ compile_design() {
             
         *)
             print_error "Unsupported simulator: $SIMULATOR"
-            exit 1
+            cd ..
+            return 1
             ;;
     esac
     
     cd ..
     print_success "Compilation complete"
+    return 0
 }
 
 # Run unit tests
 run_unit_tests() {
     print_status "Running unit tests..."
     
+    if ! check_simulator; then
+        print_warning "Simulator not available, skipping tests"
+        return 1
+    fi
+    
     cd $WORK_DIR
     
     case $SIMULATOR in
+        "icarus")
+            # MAC Controller test
+            if [ -f "tb_mac.vvp" ]; then
+                print_status "Testing MAC Controller with Icarus Verilog..."
+                vvp tb_mac.vvp
+            else
+                print_warning "MAC testbench not compiled"
+            fi
+            ;;
+            
         "modelsim"|"questa")
             # MAC Controller test
             print_status "Testing MAC Controller..."
@@ -160,9 +267,24 @@ run_unit_tests() {
 run_automotive_tests() {
     print_status "Running automotive system tests..."
     
+    if ! check_simulator; then
+        print_warning "Simulator not available, skipping tests"
+        return 1
+    fi
+    
     cd $WORK_DIR
     
     case $SIMULATOR in
+        "icarus")
+            if [ -f "tb_system.vvp" ]; then
+                print_status "Testing complete automotive TSN system with Icarus Verilog..."
+                vvp tb_system.vvp > ../automotive_test_results.log 2>&1
+                print_status "Results saved to automotive_test_results.log"
+            else
+                print_warning "System testbench not compiled"
+            fi
+            ;;
+            
         "modelsim"|"questa")
             print_status "Testing complete automotive TSN system..."
             vsim -c -do "

@@ -4,11 +4,49 @@
 
 ### 1. Simulator Not Found Error
 
-**Error:** `The term 'vlib' is not recognized...`
+**Error:** `vlib: command not found` or `The term 'vlib' is not recognized...`
 
-**Cause:** ModelSim/QuestaSim is not installed or not in the system PATH.
+**Cause:** Required simulator is not installed or not in the system PATH.
 
 **Solutions:**
+
+#### Linux Environment (Restricted Installation)
+If you're on a Linux system where you can't install software:
+
+1. **Check available simulators:**
+   ```bash
+   which iverilog  # Icarus Verilog (most common)
+   which xvlog     # Xilinx Vivado Simulator
+   which vlog      # ModelSim/QuestaSim
+   ```
+
+2. **Use auto-detection:**
+   ```bash
+   cd scripts
+   ./run_simulation.sh compile  # Auto-detects available simulator
+   ```
+
+3. **Force specific simulator:**
+   ```bash
+   # Edit run_simulation.sh and change:
+   SIMULATOR="icarus"    # for Icarus Verilog
+   SIMULATOR="vivado"    # for Vivado
+   ```
+
+#### Available Simulators on Linux:
+
+**Icarus Verilog (iverilog):**
+- Usually pre-installed on many Linux systems
+- Free and open-source
+- Good SystemVerilog 2012 support
+- Command: `iverilog -g2012`
+
+**Xilinx Vivado Simulator (xvlog/xsim):**
+- Available if Vivado is installed
+- Professional-grade simulator
+- Excellent SystemVerilog support
+
+#### Windows Environment
 1. **Install ModelSim/QuestaSim:**
    - Download Intel ModelSim-Altera Edition (free) or QuestaSim
    - Install following the vendor instructions
@@ -25,14 +63,30 @@
    .\run_simulation.ps1 compile  # Creates file lists without compilation
    ```
 
-### 2. PATH Configuration (Windows)
+### 2. PATH Configuration
 
+#### Windows
 **To add ModelSim to PATH:**
 1. Open System Properties → Advanced → Environment Variables
 2. Edit the `PATH` variable (User or System)
 3. Add the ModelSim bin directory (e.g., `C:\intelFPGA\20.1\modelsim_ase\win32aloem`)
 4. Restart PowerShell/Command Prompt
-5. Test with: `vlib --version`
+5. Test with: `vlog -version`
+
+#### Linux
+**To add simulator to PATH (if needed):**
+1. Edit your shell profile (~/.bashrc, ~/.zshrc):
+   ```bash
+   # Add to ~/.bashrc
+   export PATH="/path/to/simulator/bin:$PATH"
+   ```
+2. Reload: `source ~/.bashrc`
+3. Test with: `iverilog -V` or `xvlog -version`
+
+**Common simulator locations on Linux:**
+- Icarus Verilog: Usually in `/usr/bin/iverilog`
+- Vivado: `/tools/Xilinx/Vivado/2023.1/bin/xvlog`
+- ModelSim: `/opt/modelsim/bin/vlog`
 
 ### 3. PowerShell Execution Policy
 
@@ -62,7 +116,7 @@ powershell -ExecutionPolicy Bypass -File "run_simulation.ps1" help
 **For Vivado Simulator:**
 1. Install Xilinx Vivado (Webpack edition is free)
 2. Source the Vivado environment:
-   ```powershell
+   ```bash
    # Windows
    . C:\Xilinx\Vivado\2023.1\settings64.ps1
    
@@ -70,15 +124,59 @@ powershell -ExecutionPolicy Bypass -File "run_simulation.ps1" help
    source /tools/Xilinx/Vivado/2023.1/settings64.sh
    ```
 3. Run with Vivado simulator:
-   ```powershell
+   ```bash
+   # Linux
+   ./run_simulation.sh compile
+   
+   # Windows
    .\run_simulation.ps1 compile -Simulator vivado
    ```
+
+### 6. Icarus Verilog Specific Issues
+
+**Installation on Linux (if not available):**
+```bash
+# Ubuntu/Debian
+sudo apt-get install iverilog
+
+# CentOS/RHEL
+sudo yum install iverilog
+
+# From source (if package manager restricted)
+# Contact your system administrator
+```
+
+**Common Icarus Verilog Issues:**
+1. **SystemVerilog 2012 support:** Use `-g2012` flag
+2. **Include paths:** Use `-I` for include directories
+3. **Output files:** `.vvp` files are compiled output
+4. **Running simulation:** Use `vvp filename.vvp`
+
+**Example manual compilation with Icarus:**
+```bash
+cd scripts/work
+iverilog -g2012 -I../rtl -f rtl_files.f ../testbench/unit/tb_automotive_eth_mac.v -o test.vvp
+vvp test.vvp
+```
 
 ## Alternative Approaches
 
 ### 1. Manual Compilation
 
 If automated scripts fail, you can manually compile:
+
+**Icarus Verilog:**
+```bash
+cd scripts/work
+# Compile RTL only
+iverilog -g2012 -I../rtl -f rtl_files.f -o rtl.vvp
+
+# Compile with testbench
+iverilog -g2012 -I../rtl -I../testbench -f rtl_files.f ../testbench/unit/tb_automotive_eth_mac.v -o test.vvp
+
+# Run simulation
+vvp test.vvp
+```
 
 **ModelSim:**
 ```bash

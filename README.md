@@ -111,9 +111,13 @@ This project implements a **4-port Time-Sensitive Networking (TSN) Ethernet Swit
    git clone <repository-url>
    cd Automative-Ethernet-TSN-Switch-Controller
    
-   # Run simulation
+   # Auto-detect available simulator and compile
    cd scripts
-   ./run_simulation.sh all
+   ./run_simulation.sh compile       # Auto-detects iverilog, xvlog, or vlog
+   ./run_simulation.sh all           # Run full test suite
+   
+   # Force specific simulator
+   # Edit run_simulation.sh: SIMULATOR="icarus" or "vivado"
    
    # Synthesize for FPGA
    ./synthesize.sh
@@ -129,11 +133,5 @@ This project implements a **4-port Time-Sensitive Networking (TSN) Ethernet Swit
    - [Timing Requirements](docs/timing/timing_specification.md)
    - [Project Status](PROJECT_STATUS.md)
    - [Troubleshooting Guide](TROUBLESHOOTING.md)
+   - [Linux Quick Start](QUICK_START_LINUX.md)
 
-## Contact
-
-This project demonstrates advanced RTL design skills for automotive networking applications, specifically targeting opportunities in companies like NXP Semiconductors working on next-generation automotive Ethernet solutions.
-
----
-
-**Note:** This project is designed to showcase expertise in automotive networking, TSN protocols, and high-performance RTL design for safety-critical applications.
