@@ -78,6 +78,14 @@ module tb_automotive_tsn_system;
     integer dropped_frame_count [0:3];
     real jitter_measurements [0:99];
     
+    // Frame counting and critical timing
+    integer frame_count [0:3];
+    real critical_frame_times [0:99];
+    integer critical_frame_index;
+    
+    // Loop variables
+    integer p, i;
+    
     /*
      * Device Under Test - Complete TSN Switch System
      */
@@ -235,7 +243,7 @@ module tb_automotive_tsn_system;
             
             // Environmental stress testing
             environmental_stress_test();
-        join_any
+        join
         
         // Wait for all traffic to complete
         #100000;
@@ -266,7 +274,7 @@ module tb_automotive_tsn_system;
             wake_on_lan = 0;
             
             // Initialize GMII interfaces
-            for (integer p = 0; p < 4; p = p + 1) begin
+            for (p = 0; p < 4; p = p + 1) begin
                 gmii_rx_dv[p] = 0;
                 gmii_rx_er[p] = 0;
                 gmii_rxd[p] = 8'h0;
@@ -332,7 +340,7 @@ module tb_automotive_tsn_system;
             // Port 3: Diagnostics - Low priority, periodic
             traffic_enable[3] = 1;
             traffic_priority[3] = 3'd0;    // Lowest priority
-            traffic_interval[3] = 16'd125000; // 8Hz (125ms)
+            traffic_interval[3] = 16'd50000; // 20Hz (50ms)
             frame_size[3] = 16'd256;       // Small diagnostic frames
             
             $display("Automotive scenarios configured");
@@ -380,7 +388,7 @@ module tb_automotive_tsn_system;
                 #(traffic_interval[0] * CLOCK_PERIOD);
             end
             
-            $display("ADAS Camera scenario completed: %0d frames", frame_count[0]);
+            $display("ADAS Camera scenario completed: %0d frames", frame_num);
         end
     endtask
     
@@ -426,14 +434,14 @@ module tb_automotive_tsn_system;
                     critical_frame_index = critical_frame_index + 1;
                 end
                 
-                frame_count[1] = frame_count[1] + 1;
+                frame_count[1] = frame_num;
                 frame_num = frame_num + 1;
                 
                 // Wait for next control interval
                 #(traffic_interval[1] * CLOCK_PERIOD);
             end
             
-            $display("Brake Control scenario completed: %0d frames", frame_count[1]);
+            $display("Brake Control scenario completed: %0d frames", frame_num);
         end
     endtask
     

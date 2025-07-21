@@ -88,8 +88,10 @@ module tb_automotive_eth_mac;
      */
     integer test_frame_count;
     integer error_count_test;
-    real latency_measurements [0:99];
     integer latency_index;
+    real latency_measurements [0:99]; // Array to store latency measurements
+    real avg_latency;
+    integer i; // Loop variable
     time frame_start_time, frame_end_time;
     
     // Test frame data
@@ -241,8 +243,8 @@ module tb_automotive_eth_mac;
         $display("Error count: %0d", error_count);
         
         if (latency_index > 0) begin
-            real avg_latency = 0;
-            for (integer i = 0; i < latency_index; i = i + 1) begin
+            avg_latency = 0;
+            for (i = 0; i < latency_index; i = i + 1) begin
                 avg_latency = avg_latency + latency_measurements[i];
             end
             avg_latency = avg_latency / latency_index;
@@ -467,7 +469,7 @@ module tb_automotive_eth_mac;
             $display("\n--- Test: Performance Measurement ---");
             
             // Send multiple frames back-to-back
-            for (integer i = 0; i < 10; i = i + 1) begin
+            for (i = 0; i < 10; i = i + 1) begin
                 create_ethernet_frame(
                     48'h00_1B_19_00_00_02,
                     48'h00_1B_19_00_00_01,
@@ -516,7 +518,7 @@ module tb_automotive_eth_mac;
             idx = 0;
             
             // Preamble
-            for (integer i = 0; i < 7; i = i + 1) begin
+            for (i = 0; i < 7; i = i + 1) begin
                 test_frame_data[idx] = 8'h55;
                 idx = idx + 1;
             end
