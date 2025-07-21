@@ -167,8 +167,8 @@ module automotive_tsn_switch_top #(
     wire [1:0]   tsn_selected_port;
     
     // Switch matrix signals
-    wire [31:0]  switch_forwarded_frames [0:3];
-    wire [31:0]  switch_dropped_frames [0:3];
+    wire [127:0] switch_forwarded_frames_packed;
+    wire [127:0] switch_dropped_frames_packed;
     wire [31:0]  switch_learned_addresses;
     wire [15:0]  switch_status;
     wire [15:0]  switch_latency;
@@ -484,8 +484,8 @@ module automotive_tsn_switch_top #(
         .vlan_untag_packed(1024'h0), // No untagging
         
         // Statistics
-        .forwarded_frames(switch_forwarded_frames),
-        .dropped_frames(switch_dropped_frames),
+        .forwarded_frames_packed(switch_forwarded_frames_packed),
+        .dropped_frames_packed(switch_dropped_frames_packed),
         .learned_addresses(switch_learned_addresses),
         .security_violations(config_registers[98]),
         .switch_status(switch_status),
@@ -556,7 +556,7 @@ module automotive_tsn_switch_top #(
         port_link_status[1],    // LED 3: Port 1 link
         port_link_status[2],    // LED 2: Port 2 link
         port_link_status[3],    // LED 1: Port 3 link
-        |switch_dropped_frames[0] // LED 0: Any drops on port 0
+        |switch_dropped_frames_packed[31:0] // LED 0: Any drops on port 0
     };
     
     // Power management
