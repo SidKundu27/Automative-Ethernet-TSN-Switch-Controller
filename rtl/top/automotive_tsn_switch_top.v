@@ -415,8 +415,6 @@ module automotive_tsn_switch_top #(
         .cbs_send_slope_packed(256'h07735940077359400773594007735940077359400773594007735940077359400), // 125Mbps each
         .cbs_hi_credit_packed(256'h000F4240000F4240000F4240000F4240000F4240000F4240000F4240000F4240), // 1M credits each
         .cbs_lo_credit_packed(256'hFFF0BDBFFFF0BDBFFFF0BDBFFFF0BDBFFFF0BDBFFFF0BDBFFFF0BDBFFFF0BDBF), // -1M credits each
-                        32'd1000000, 32'd1000000, 32'd1000000, 32'd1000000}),
-        .cbs_lo_credit('{-32'd1000000, -32'd1000000, -32'd1000000, -32'd1000000,
         
         // Statistics (using packed interface)
         .gates_opened_packed(/* Connect to status registers */),
@@ -482,8 +480,8 @@ module automotive_tsn_switch_top #(
         .blocked_ethertypes(config_registers[4][15:0]),
         
         // VLAN configuration (simplified)
-        .vlan_member('{4'hF, 4'hF, 4'hF, 4'hF}), // All ports in all VLANs for now
-        .vlan_untag('{4'h0, 4'h0, 4'h0, 4'h0}),  // No untagging for now
+        .vlan_member_packed(1024'hFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF), // All ports in all VLANs
+        .vlan_untag_packed(1024'h0), // No untagging
         
         // Statistics
         .forwarded_frames(switch_forwarded_frames),

@@ -67,12 +67,12 @@ module switching_matrix #(
     input  wire [15:0]  blocked_ethertypes, // Blocked EtherTypes bitmap
     
     // VLAN Configuration
-    input  wire [3:0]   vlan_member [0:255], // VLAN membership per port
-    input  wire [3:0]   vlan_untag [0:255],  // VLAN untagging per port
+    input  wire [1023:0] vlan_member_packed,   // VLAN membership per port (256x4-bit)
+    input  wire [1023:0] vlan_untag_packed,    // VLAN untagging per port (256x4-bit)
     
     // Statistics and Status
-    output wire [31:0]  forwarded_frames [0:3], // Forwarded frames per port
-    output wire [31:0]  dropped_frames [0:3],   // Dropped frames per port
+    output wire [127:0]  forwarded_frames_packed, // Forwarded frames per port (4x32-bit)
+    output wire [127:0]  dropped_frames_packed,   // Dropped frames per port (4x32-bit)
     output wire [31:0]  learned_addresses,      // Total learned MAC addresses
     output wire [31:0]  security_violations,    // Security violation count
     output wire [15:0]  switch_status,          // Overall switch status
@@ -122,6 +122,18 @@ module switching_matrix #(
     reg [31:0]  cut_through_count_reg_total;
     reg [31:0]  store_forward_count_reg;
     
+    // Unpack input arrays from packed vectors
+    wire [3:0] vlan_member [0:255];
+    wire [3:0] vlan_untag [0:255];
+    
+    genvar v;
+    generate
+        for (v = 0; v < 256; v = v + 1) begin : unpack_vlan
+            assign vlan_member[v] = vlan_member_packed[4*v+3:4*v];
+            assign vlan_untag[v] = vlan_untag_packed[4*v+3:4*v];
+        end
+    endgenerate
+    
     /*
      * MAC Address Learning Engine
      * Learns source MAC addresses and associates them with input ports
@@ -131,20 +143,24 @@ module switching_matrix #(
     generate
         for (port = 0; port < NUM_PORTS; port = port + 1) begin : gen_learning
             
+            // Wire declarations for learning engine
+            wire [47:0] src_mac = rx_src_mac[(port*48) +: 48];
+            wire [11:0] vlan_id = rx_vlan_valid[port] ? rx_vlan_id[(port*12) +: 12] : default_vlan;
+            
+            // Register declarations for learning engine
+            reg [9:0] lookup_index;
+            reg found;
+            integer i;
+            
             always @(posedge clk or negedge rst_n) begin
                 if (!rst_n) begin
                     // Reset handled in separate initial block
                 end else if (learning_enable && rx_valid[port] && rx_sof[port]) begin
                     // Look up source MAC in table
-                    wire [47:0] src_mac = rx_src_mac[(port*48) +: 48];
-                    wire [11:0] vlan_id = rx_vlan_valid[port] ? rx_vlan_id[(port*12) +: 12] : default_vlan;
-                    
-                    reg [9:0] lookup_index;
-                    reg found;
                     
                     // Search for existing entry
                     found = 1'b0;
-                    for (integer i = 0; i < MAC_TABLE_SIZE; i = i + 1) begin
+                    for (i = 0; i < MAC_TABLE_SIZE; i = i + 1) begin
                         if (mac_table_valid[i] && 
                             mac_table_addr[i] == src_mac && 
                             mac_table_vlan[i] == vlan_id) begin
@@ -179,6 +195,20 @@ module switching_matrix #(
     generate
         for (port = 0; port < NUM_PORTS; port = port + 1) begin : gen_forwarding
             
+            // Wire declarations for forwarding engine
+            wire [47:0] dst_mac = rx_dst_mac[(port*48) +: 48];
+            wire [47:0] src_mac = rx_src_mac[(port*48) +: 48];
+            wire [11:0] vlan_id = rx_vlan_valid[port] ? rx_vlan_id[(port*12) +: 12] : default_vlan;
+            wire [15:0] ethertype = rx_ethertype[(port*16) +: 16];
+            wire [2:0]  priority = rx_priority[(port*3) +: 3];
+            
+            // Register declarations for forwarding engine
+            reg [3:0] output_ports;
+            reg drop_frame;
+            reg security_violation;
+            reg lookup_found;
+            integer i;
+            
             always @(posedge clk or negedge rst_n) begin
                 if (!rst_n) begin
                     forward_port_mask[port] <= 4'h0;
@@ -187,16 +217,6 @@ module switching_matrix #(
                     forward_drop[port] <= 1'b0;
                     forward_cut_through[port] <= 1'b0;
                 end else if (rx_valid[port] && rx_sof[port] && !rx_error[port]) begin
-                    
-                    wire [47:0] dst_mac = rx_dst_mac[(port*48) +: 48];
-                    wire [47:0] src_mac = rx_src_mac[(port*48) +: 48];
-                    wire [11:0] vlan_id = rx_vlan_valid[port] ? rx_vlan_id[(port*12) +: 12] : default_vlan;
-                    wire [15:0] ethertype = rx_ethertype[(port*16) +: 16];
-                    wire [2:0]  priority = rx_priority[(port*3) +: 3];
-                    
-                    reg [3:0] output_ports;
-                    reg drop_frame;
-                    reg security_violation;
                     
                     // Initialize
                     output_ports = 4'h0;
@@ -230,10 +250,10 @@ module switching_matrix #(
                             end
                         end else begin
                             // Unicast - lookup in MAC table
-                            reg lookup_found;
+                            
                             lookup_found = 1'b0;
                             
-                            for (integer i = 0; i < MAC_TABLE_SIZE; i = i + 1) begin
+                            for (i = 0; i < MAC_TABLE_SIZE; i = i + 1) begin
                                 if (mac_table_valid[i] && 
                                     mac_table_addr[i] == dst_mac && 
                                     mac_table_vlan[i] == vlan_id) begin
@@ -309,6 +329,11 @@ module switching_matrix #(
             reg [1:0]  output_mod;
             reg [2:0]  output_priority;
             
+            // Register declarations for output arbitration
+            reg [1:0] selected_input;
+            reg found;
+            integer i, check_port;
+            
             always @(posedge clk or negedge rst_n) begin
                 if (!rst_n) begin
                     current_input <= 2'h0;
@@ -327,15 +352,13 @@ module switching_matrix #(
                     
                     if (!output_active && tx_ready[port]) begin
                         // Look for new frame to forward (round-robin arbitration)
-                        reg [1:0] selected_input;
-                        reg found;
                         
                         found = 1'b0;
                         selected_input = 2'h0;
                         
                         // Check each input port based on arbitration order
-                        for (integer i = 0; i < NUM_PORTS; i = i + 1) begin
-                            integer check_port = (i + output_arbitration[port]) % NUM_PORTS;
+                        for (i = 0; i < NUM_PORTS; i = i + 1) begin
+                            check_port = (i + output_arbitration[port]) % NUM_PORTS;
                             if (!found && forward_valid[check_port] && 
                                 forward_port_mask[check_port][port] && 
                                 !forward_drop[check_port]) begin
@@ -400,13 +423,17 @@ module switching_matrix #(
     reg [63:0] latency_accumulator;
     reg [15:0] latency_count;
     
+    // Latency measurement variables
+    reg [31:0] latency_ns;
+    integer p;
+    
     always @(posedge clk) begin
         // Calculate average latency based on frame timestamps
         if (|tx_eof) begin
             // Frame completed transmission
-            for (integer p = 0; p < NUM_PORTS; p = p + 1) begin
+            for (p = 0; p < NUM_PORTS; p = p + 1) begin
                 if (tx_eof[p]) begin
-                    wire [31:0] latency_ns = ptp_time[31:0] - frame_start_time[p][31:0];
+                    latency_ns = ptp_time[31:0] - frame_start_time[p][31:0];
                     latency_accumulator <= latency_accumulator + {32'h0, latency_ns};
                     latency_count <= latency_count + 1;
                     
@@ -455,15 +482,11 @@ module switching_matrix #(
      */
     
     // Statistics outputs
-    assign forwarded_frames[0] = forwarded_frames_reg[0];
-    assign forwarded_frames[1] = forwarded_frames_reg[1];
-    assign forwarded_frames[2] = forwarded_frames_reg[2];
-    assign forwarded_frames[3] = forwarded_frames_reg[3];
+    assign forwarded_frames_packed = {forwarded_frames_reg[3], forwarded_frames_reg[2], 
+                                     forwarded_frames_reg[1], forwarded_frames_reg[0]};
     
-    assign dropped_frames[0] = dropped_frames_reg[0];
-    assign dropped_frames[1] = dropped_frames_reg[1];
-    assign dropped_frames[2] = dropped_frames_reg[2];
-    assign dropped_frames[3] = dropped_frames_reg[3];
+    assign dropped_frames_packed = {dropped_frames_reg[3], dropped_frames_reg[2], 
+                                   dropped_frames_reg[1], dropped_frames_reg[0]};
     
     assign learned_addresses = learned_addresses_reg;
     assign security_violations = security_violations_reg;
